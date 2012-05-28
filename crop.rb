@@ -2,6 +2,10 @@ require 'rubygems'
 require 'rmagick'
 
 puts "Cropping...."
+
+threshold = 70000000
+pixel_size = 3
+
 start_time = Time.now
 
 image = ARGV[0]
@@ -10,49 +14,80 @@ m_image = Magick::Image.read(image)[0]
 filename =  m_image.filename
 width =  m_image.columns
 height = m_image.rows
-WHITE = 65535
 
-white_rows = []
-top_found = bottom_found = false
-image_top = 0
-image_bottom = height-1
+#process top to bottom
+row = 0
+croppable = true
+while row < m_image.rows && croppable
+  row_pixels = m_image.export_pixels(0, row, width, 1, "RGB")
 
-(0...m_image.rows).each do |row|
-  all_white = true
-  m_image.export_pixels(0, row, width, 1, "RGB").each do |pixel|
-    all_white = false unless pixel == WHITE
+  col = pixel_size
+  while col < row_pixels.size-(2*pixel_size) && croppable
+
+    #left side of pixel
+    r1 = row_pixels[col-3] << 16 #8 bit color channels
+    g1 = row_pixels[col-2] << 8
+    b1 = row_pixels[col-1]
+    px1 = r1 | g1 | b1
+
+    #right side of pixel
+    r2 = row_pixels[col+4] << 16
+    g2 = row_pixels[col+5] << 8
+    b2 = row_pixels[col+6]
+    px2 = r2 | g2 | b2
+
+    diff = (px1 - px2).abs
+
+    if diff > threshold
+      croppable = false
+    else
+      col += pixel_size
+    end
   end
 
-  white_rows << row if all_white
+  row += 1 if croppable
 end
+image_top = [0,row].max
 
-num_white = white_rows.size
-i = 0
-while (!top_found || !bottom_found) && i < num_white
-  
-  #Is the next white row in the list an adjacent row to the current one
-  if(!top_found && white_rows[i+1] != white_rows[i] + 1)
-    image_top = white_rows[i]
-    top_found = true
+#process bottom to top
+row = height-1
+croppable = true
+while row >= image_top && croppable
+  row_pixels = m_image.export_pixels(0, row, width, 1, "RGB")
+
+  col = pixel_size
+  while col < row_pixels.size-(2*pixel_size) && croppable
+
+    r1 = row_pixels[col-3] << 16
+    g1 = row_pixels[col-2] << 8
+    b1 = row_pixels[col-1]
+    px1 = r1 | g1 | b1
+
+    r2 = row_pixels[col+4] << 16
+    g2 = row_pixels[col+5] << 8
+    b2 = row_pixels[col+6]
+    px2 = r2 | g2 | b2
+
+    diff = (px1 - px2).abs
+
+    if diff > threshold
+      croppable = false
+    else
+      col += pixel_size
+    end
   end
 
-  #Is the previous white row in the list an adjacent row to the current one
-  if(!bottom_found && white_rows[(num_white-1)-i]-1  != white_rows[(num_white-1)-i-1])
-    image_bottom = white_rows[num_white-1-i]
-    bottom_found = true
-  end
-
-  i+=1
+  row -= 1 if croppable
 end
+image_bottom = [row,height-1].min
+
 crop_height = image_bottom-image_top
 
 if crop_height > 0
   sub_img_pixels = m_image.dispatch(0, image_top, width, crop_height, "RGB")
   new_img = Magick::Image.constitute(width, crop_height, "RGB", sub_img_pixels)
+  new_img.format = 'jpg'
   new_img.write("cropped-#{filename}")
-else
-  puts "Sorry, no white to crop"
 end
 
 new_img = nil
-puts "Done in #{Time.now - start_time}"
