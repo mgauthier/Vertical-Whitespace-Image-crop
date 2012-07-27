@@ -3,7 +3,8 @@ require 'rmagick'
 
 puts "Cropping...."
 
-threshold = 70000000
+#threshold = 70000000
+threshold = 90000000
 pixel_size = 3
 
 start_time = Time.now
@@ -88,6 +89,9 @@ if crop_height > 0
   new_img = Magick::Image.constitute(width, crop_height, "RGB", sub_img_pixels)
   new_img.format = 'jpg'
   new_img.write("cropped-#{filename}")
+  puts "Cropped!"
+else
+  puts "Sorry, nothing was cropped"
 end
 
 new_img = nil
